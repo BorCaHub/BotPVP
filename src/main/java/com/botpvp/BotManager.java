@@ -1,29 +1,17 @@
 package com.botpvp;
 
 import com.botpvp.bot.PvPBot;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.util.*;
 
-/**
- * BotManager - Singleton manager for all active PvP bots.
- *
- * Handles spawning, removing, listing, healing, and ticking all bots
- * across different players and worlds.
- *
- * Supported Minecraft versions: 26.1.1, 26.1.2
- */
 public class BotManager {
 
     private static BotManager instance;
-
-    /** Map from bot UUID to PvPBot. */
     private final Map<UUID, PvPBot> activeBots = new HashMap<>();
-
-    /** Map from player UUID to list of their bot UUIDs. */
     private final Map<UUID, List<UUID>> playerBots = new HashMap<>();
 
     private BotManager() {}
@@ -33,128 +21,92 @@ public class BotManager {
         return instance;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Spawn
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Spawn a new PvP bot.
-     *
-     * @param player      The player requesting the bot
-     * @param world       Target world
-     * @param difficulty  easy / medium / hard / nightmare
-     * @param botName     Custom name (must pass Minecraft username rules), or null to auto-generate
-     * @param staticMode  true = no movement; false = normal chasing AI
-     */
-    public PvPBot spawnBot(ServerPlayerEntity player, ServerWorld world,
+    public PvPBot spawnBot(ServerPlayer player, ServerLevel world,
                            String difficulty, String botName, boolean staticMode) {
-
-        // Enforce per-player bot limit
-        List<UUID> bots = playerBots.getOrDefault(player.getUuid(), new ArrayList<>());
+        List<UUID> bots = playerBots.getOrDefault(player.getUUID(), new ArrayList<>());
         if (bots.size() >= 5) {
-            player.sendMessage(Text.literal("§c[BotPvP] §fYou have reached the maximum of 5 bots!"));
+            player.sendSystemMessage(Component.literal("§c[BotPvP] §fYou have reached the maximum of 5 bots!"));
             return null;
         }
 
-        // Validate name against Minecraft username rules
         if (botName != null && !botName.isEmpty()) {
             String error = PvPBot.validateName(botName);
             if (error != null) {
-                player.sendMessage(Text.literal("§c[BotPvP] §fInvalid bot name: §e" + error));
+                player.sendSystemMessage(Component.literal("§c[BotPvP] §fInvalid bot name: §e" + error));
                 return null;
             }
         }
 
-        String finalName = (botName != null && !botName.isEmpty())
-                ? botName
-                : generateBotName(difficulty);
-
+        String finalName = (botName != null && !botName.isEmpty()) ? botName : generateBotName(difficulty);
         PvPBot bot = new PvPBot(player, world, difficulty, finalName, staticMode);
 
         if (bot.spawn()) {
             UUID botId = bot.getUuid();
             activeBots.put(botId, bot);
             bots.add(botId);
-            playerBots.put(player.getUuid(), bots);
-
+            playerBots.put(player.getUUID(), bots);
             String modeLabel = staticMode ? "§7(static)" : "§b(moving)";
-            player.sendMessage(Text.literal(
-                "§a[BotPvP] §fSpawned bot §e" + finalName +
-                " §7[§b" + difficulty + "§7] " + modeLabel));
+            player.sendSystemMessage(Component.literal(
+                "§a[BotPvP] §fSpawned bot §e" + finalName + " §7[§b" + difficulty + "§7] " + modeLabel));
             return bot;
         } else {
-            player.sendMessage(Text.literal("§c[BotPvP] §fFailed to spawn bot. Please try again."));
+            player.sendSystemMessage(Component.literal("§c[BotPvP] §fFailed to spawn bot."));
             return null;
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Kill
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public boolean killBot(ServerPlayerEntity player, String botName) {
-        List<UUID> bots = playerBots.getOrDefault(player.getUuid(), new ArrayList<>());
+    public boolean killBot(ServerPlayer player, String botName) {
+        List<UUID> bots = playerBots.getOrDefault(player.getUUID(), new ArrayList<>());
         for (UUID botId : new ArrayList<>(bots)) {
             PvPBot bot = activeBots.get(botId);
             if (bot != null && bot.getName().equalsIgnoreCase(botName)) {
                 bot.remove();
                 activeBots.remove(botId);
                 bots.remove(botId);
-                player.sendMessage(Text.literal("§a[BotPvP] §fBot §e" + botName + " §fremoved."));
+                player.sendSystemMessage(Component.literal("§a[BotPvP] §fBot §e" + botName + " §fremoved."));
                 return true;
             }
         }
-        player.sendMessage(Text.literal("§c[BotPvP] §fNo bot named §e" + botName + " §ffound."));
+        player.sendSystemMessage(Component.literal("§c[BotPvP] §fNo bot named §e" + botName + " §ffound."));
         return false;
     }
 
-    public int killAllBots(ServerPlayerEntity player) {
-        List<UUID> bots = playerBots.getOrDefault(player.getUuid(), new ArrayList<>());
+    public int killAllBots(ServerPlayer player) {
+        List<UUID> bots = playerBots.getOrDefault(player.getUUID(), new ArrayList<>());
         int count = bots.size();
         for (UUID botId : new ArrayList<>(bots)) {
             PvPBot bot = activeBots.get(botId);
             if (bot != null) { bot.remove(); activeBots.remove(botId); }
         }
         bots.clear();
-        playerBots.put(player.getUuid(), bots);
+        playerBots.put(player.getUUID(), bots);
         if (count > 0)
-            player.sendMessage(Text.literal("§a[BotPvP] §fRemoved all §e" + count + " §fbot(s)."));
+            player.sendSystemMessage(Component.literal("§a[BotPvP] §fRemoved all §e" + count + " §fbot(s)."));
         else
-            player.sendMessage(Text.literal("§e[BotPvP] §fYou have no active bots."));
+            player.sendSystemMessage(Component.literal("§e[BotPvP] §fYou have no active bots."));
         return count;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // List
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public void listBots(ServerPlayerEntity player) {
-        List<UUID> bots = playerBots.getOrDefault(player.getUuid(), new ArrayList<>());
+    public void listBots(ServerPlayer player) {
+        List<UUID> bots = playerBots.getOrDefault(player.getUUID(), new ArrayList<>());
         if (bots.isEmpty()) {
-            player.sendMessage(Text.literal("§e[BotPvP] §fYou have no active bots."));
+            player.sendSystemMessage(Component.literal("§e[BotPvP] §fYou have no active bots."));
             return;
         }
-        player.sendMessage(Text.literal("§6[BotPvP] §fYour active bots §e(" + bots.size() + "/5)§f:"));
+        player.sendSystemMessage(Component.literal("§6[BotPvP] §fYour active bots §e(" + bots.size() + "/5)§f:"));
         for (UUID botId : bots) {
             PvPBot bot = activeBots.get(botId);
             if (bot != null) {
                 String status = bot.isAlive() ? "§aAlive" : "§cDead";
-                String mode   = bot.isStatic() ? "§7Static" : "§bMoving";
-                player.sendMessage(Text.literal(
-                    "  §7» §e" + bot.getName() +
-                    " §7| Difficulty: §b" + bot.getDifficulty() +
-                    " §7| Mode: " + mode +
-                    " §7| Status: " + status));
+                String mode = bot.isStatic() ? "§7Static" : "§bMoving";
+                player.sendSystemMessage(Component.literal(
+                    "  §7» §e" + bot.getName() + " §7| §b" + bot.getDifficulty() + " §7| " + mode + " §7| " + status));
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Heal
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public boolean healBot(ServerPlayerEntity player, String botName) {
-        List<UUID> bots = playerBots.getOrDefault(player.getUuid(), new ArrayList<>());
+    public boolean healBot(ServerPlayer player, String botName) {
+        List<UUID> bots = playerBots.getOrDefault(player.getUUID(), new ArrayList<>());
         for (UUID botId : bots) {
             PvPBot bot = activeBots.get(botId);
             if (bot != null && bot.getName().equalsIgnoreCase(botName)) {
@@ -162,26 +114,22 @@ public class BotManager {
                 return true;
             }
         }
-        player.sendMessage(Text.literal("§c[BotPvP] §fNo bot named §e" + botName + " §ffound."));
+        player.sendSystemMessage(Component.literal("§c[BotPvP] §fNo bot named §e" + botName + " §ffound."));
         return false;
     }
 
-    public void healAllBots(ServerPlayerEntity player) {
-        List<UUID> bots = playerBots.getOrDefault(player.getUuid(), new ArrayList<>());
+    public void healAllBots(ServerPlayer player) {
+        List<UUID> bots = playerBots.getOrDefault(player.getUUID(), new ArrayList<>());
         if (bots.isEmpty()) {
-            player.sendMessage(Text.literal("§e[BotPvP] §fYou have no active bots to heal."));
+            player.sendSystemMessage(Component.literal("§e[BotPvP] §fYou have no active bots to heal."));
             return;
         }
         for (UUID botId : bots) {
             PvPBot bot = activeBots.get(botId);
             if (bot != null) bot.respawn();
         }
-        player.sendMessage(Text.literal("§a[BotPvP] §fAll bots have been healed!"));
+        player.sendSystemMessage(Component.literal("§a[BotPvP] §fAll bots have been healed!"));
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Tick
-    // ─────────────────────────────────────────────────────────────────────────
 
     public void tickBots(MinecraftServer server) {
         List<UUID> toRemove = new ArrayList<>();
@@ -200,16 +148,11 @@ public class BotManager {
 
     public void reset() { activeBots.clear(); playerBots.clear(); }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Name generation (valid Minecraft usernames, 3-16 chars, a-zA-Z0-9_)
-    // ─────────────────────────────────────────────────────────────────────────
-
     private String generateBotName(String difficulty) {
         String[] easy      = {"Noob_Bot", "Baby_Bot", "Starter", "NewbieXD"};
         String[] medium    = {"Fighter", "Warrior", "BladeBot", "Storm_PvP"};
         String[] hard      = {"Elite_PvP", "Savage_Bot", "Demon_PvP", "Fury"};
         String[] nightmare = {"Shadow_GG", "GodBot", "Overlord", "NightBot"};
-
         String[] pool = switch (difficulty.toLowerCase()) {
             case "easy"      -> easy;
             case "medium"    -> medium;
