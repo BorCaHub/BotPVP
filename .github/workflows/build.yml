@@ -35,5 +35,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: botpvp-mc26.1.2
-          path: build/libs/*.jar
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+            !build/libs/*-dev.jar
           if-no-files-found: error
