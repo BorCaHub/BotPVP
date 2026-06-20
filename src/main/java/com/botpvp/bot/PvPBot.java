@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
@@ -27,6 +28,8 @@ public class PvPBot {
         return null;
     }
 
+    public enum ItemPose { TO_PLAYER, UP, CUSTOM }
+
     private final ServerPlayer owner;
     private final ServerLevel world;
     private final String difficulty;
@@ -44,6 +47,10 @@ public class PvPBot {
     private int reactionDelay;
     private boolean usesCombos;
     private boolean blockHits;
+
+    private ItemPose itemPose = ItemPose.TO_PLAYER;
+    private float customYaw = 0f;
+    private float customPitch = 0f;
 
     public PvPBot(ServerPlayer owner, ServerLevel world, String difficulty, String name, boolean staticMode) {
         this.owner      = owner;
@@ -134,6 +141,28 @@ public class PvPBot {
         }
     }
 
+    public boolean addItem(EquipmentSlot slot, Item item) {
+        if (botEntity == null) return false;
+        botEntity.setItemSlot(slot, new ItemStack(item));
+        return true;
+    }
+
+    public void setItemPose(ItemPose pose, float yaw, float pitch) {
+        this.itemPose = pose;
+        this.customYaw = yaw;
+        this.customPitch = pitch;
+        applyItemPose();
+    }
+
+    private void applyItemPose() {
+        if (botEntity == null) return;
+        switch (itemPose) {
+            case TO_PLAYER -> faceTarget(owner);
+            case UP -> { botEntity.setXRot(-90f); }
+            case CUSTOM -> { botEntity.setYRot(customYaw); botEntity.setYHeadRot(customYaw); botEntity.setXRot(customPitch); }
+        }
+    }
+
     public void tick() {
         if (!alive || botEntity == null || botEntity.isDeadOrDying()) {
             if (alive) {
@@ -146,20 +175,16 @@ public class PvPBot {
             return;
         }
 
+        if (staticMode) {
+            if (itemPose == ItemPose.TO_PLAYER) faceTarget(owner);
+            return;
+        }
+
         tickCounter++;
         if (tickCounter < reactionDelay) return;
 
         LivingEntity target = owner;
         double distanceSq = botEntity.distanceToSqr(target);
-
-        if (staticMode) {
-            faceTarget(target);
-            if (distanceSq <= 9 && tickCounter % attackCooldown == 0) {
-                performAttack(target);
-                if (blockHits) botEntity.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-            }
-            return;
-        }
 
         if (distanceSq > 400) {
             if (tickCounter % 40 == 0) {
