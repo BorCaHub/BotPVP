@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "botpvp",
+  "version": "${version}",
+  "name": "BotPvP",
+  "description": "Practice PvP against AI bots with /botpvp. Supports moving and static bots across 4 difficulty levels. For Minecraft 26.1.1 and 26.1.2.",
+  "authors": [
+    "YourName"
+  ],
+  "contact": {
+    "homepage": "https://modrinth.com/mod/botpvp",
+    "sources": "https://github.com/yourusername/botpvp",
+    "issues": "https://github.com/yourusername/botpvp/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/botpvp/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.botpvp.BotPvPMod"
+    ],
+    "fabric-datagen": [
+      "com.botpvp.BotPvPDataGenerator"
+    ]
+  },
+  "mixins": [
+    "botpvp.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "fabric-api": "*",
+    "minecraft": ["26.1.1", "26.1.2"]
+  }
+}
