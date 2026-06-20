@@ -8,19 +8,6 @@ import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * BotPvPMod - Main mod entry point.
- *
- * A Fabric mod for practicing PvP against AI bots using /botpvp.
- * Supports Minecraft 26.1.1 and 26.1.2.
- *
- * Features:
- *   - Moving bots (chase + attack)
- *   - Static bots (stand still, attack in range)
- *   - 4 difficulty levels: easy, medium, hard, nightmare
- *   - Bot names validated against Minecraft username rules
- *   - Mod icon visible in the Mods screen
- */
 public class BotPvPMod implements ModInitializer {
 
     public static final String MOD_ID = "botpvp";
@@ -28,16 +15,14 @@ public class BotPvPMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        LOGGER.info("[BotPvP] Loading BotPvP v1.0.0 for Minecraft 26.1.1 / 26.1.2");
+        LOGGER.info("[BotPvP] Loading BotPvP v1.0.0");
 
-        // Register /botpvp and all subcommands
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 BotPvPCommand.register(dispatcher));
 
-        // Tick all active bots every server tick
         ServerTickEvents.END_SERVER_TICK.register(BotPvPMod::onServerTick);
 
-        LOGGER.info("[BotPvP] Mod loaded successfully! Use /botpvp help in-game.");
+        LOGGER.info("[BotPvP] Mod loaded! Use /botpvp help in-game.");
     }
 
     private static void onServerTick(MinecraftServer server) {
