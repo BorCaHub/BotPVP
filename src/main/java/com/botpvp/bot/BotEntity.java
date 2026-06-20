@@ -37,9 +37,6 @@ public class BotEntity extends Monster {
     public boolean isPersistenceRequired() { return true; }
 
     @Override
-    public boolean isUndead() { return false; }
-
-    @Override
     protected SoundEvent getHurtSound(DamageSource source) {
         return SoundEvents.PLAYER_HURT;
     }
