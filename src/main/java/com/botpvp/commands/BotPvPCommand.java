@@ -9,7 +9,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -181,8 +180,10 @@ public class BotPvPCommand {
             source.sendFailure(Component.literal("§c[BotPvP] Invalid slot! Use: mainhand, offhand, head, chest, legs, feet"));
             return 0;
         }
-        ResourceLocation id = ResourceLocation.tryParse(itemName.contains(":") ? itemName : "minecraft:" + itemName);
-        Item item = id != null ? BuiltInRegistries.ITEM.getOptional(id).orElse(null) : null;
+        String key = itemName.contains(":") ? itemName.substring(itemName.indexOf(':') + 1) : itemName;
+        Item item = BuiltInRegistries.ITEM.stream()
+                .filter(i -> BuiltInRegistries.ITEM.getKey(i).getPath().equalsIgnoreCase(key))
+                .findFirst().orElse(null);
         if (item == null) {
             source.sendFailure(Component.literal("§c[BotPvP] Unknown item: §e" + itemName));
             return 0;
