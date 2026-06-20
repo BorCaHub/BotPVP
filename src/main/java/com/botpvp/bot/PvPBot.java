@@ -73,7 +73,9 @@ public class PvPBot {
             double spawnZ = ownerPos.z + (Math.random() * 4 - 2);
 
             botEntity = new BotEntity(world, this);
-            botEntity.moveTo(spawnX, spawnY, spawnZ, 0, 0);
+            botEntity.setPos(spawnX, spawnY, spawnZ);
+            botEntity.setYRot(0);
+            botEntity.setXRot(0);
 
             String modeTag = staticMode ? "§7[Static]" : "§c[Bot]";
             botEntity.setCustomName(Component.literal(modeTag + " §f" + name));
