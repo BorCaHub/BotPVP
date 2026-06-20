@@ -5,6 +5,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Item;
 
 import java.util.*;
 
@@ -24,10 +26,6 @@ public class BotManager {
     public PvPBot spawnBot(ServerPlayer player, ServerLevel world,
                            String difficulty, String botName, boolean staticMode) {
         List<UUID> bots = playerBots.getOrDefault(player.getUUID(), new ArrayList<>());
-        if (bots.size() >= 5) {
-            player.sendSystemMessage(Component.literal("§c[BotPvP] §fYou have reached the maximum of 5 bots!"));
-            return null;
-        }
 
         if (botName != null && !botName.isEmpty()) {
             String error = PvPBot.validateName(botName);
@@ -93,7 +91,7 @@ public class BotManager {
             player.sendSystemMessage(Component.literal("§e[BotPvP] §fYou have no active bots."));
             return;
         }
-        player.sendSystemMessage(Component.literal("§6[BotPvP] §fYour active bots §e(" + bots.size() + "/5)§f:"));
+        player.sendSystemMessage(Component.literal("§6[BotPvP] §fYour active bots §e(" + bots.size() + ")§f:"));
         for (UUID botId : bots) {
             PvPBot bot = activeBots.get(botId);
             if (bot != null) {
@@ -129,6 +127,35 @@ public class BotManager {
             if (bot != null) bot.respawn();
         }
         player.sendSystemMessage(Component.literal("§a[BotPvP] §fAll bots have been healed!"));
+    }
+
+    public PvPBot findBot(ServerPlayer player, String botName) {
+        List<UUID> bots = playerBots.getOrDefault(player.getUUID(), new ArrayList<>());
+        for (UUID botId : bots) {
+            PvPBot bot = activeBots.get(botId);
+            if (bot != null && bot.getName().equalsIgnoreCase(botName)) return bot;
+        }
+        return null;
+    }
+
+    public boolean addItemToBot(ServerPlayer player, String botName, EquipmentSlot slot, Item item) {
+        PvPBot bot = findBot(player, botName);
+        if (bot == null) {
+            player.sendSystemMessage(Component.literal("§c[BotPvP] §fNo bot named §e" + botName + " §ffound."));
+            return false;
+        }
+        bot.addItem(slot, item);
+        return true;
+    }
+
+    public boolean setBotItemPose(ServerPlayer player, String botName, PvPBot.ItemPose pose, float yaw, float pitch) {
+        PvPBot bot = findBot(player, botName);
+        if (bot == null) {
+            player.sendSystemMessage(Component.literal("§c[BotPvP] §fNo bot named §e" + botName + " §ffound."));
+            return false;
+        }
+        bot.setItemPose(pose, yaw, pitch);
+        return true;
     }
 
     public void tickBots(MinecraftServer server) {
