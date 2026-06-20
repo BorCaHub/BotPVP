@@ -158,6 +158,19 @@ public class BotManager {
         return true;
     }
 
+    public boolean toggleUnlimitedHealth(ServerPlayer player, String botName) {
+        PvPBot bot = findBot(player, botName);
+        if (bot == null) {
+            player.sendSystemMessage(Component.literal("§c[BotPvP] §fNo bot named §e" + botName + " §ffound."));
+            return false;
+        }
+        boolean newState = !bot.isUnlimitedHealth();
+        bot.setUnlimitedHealth(newState);
+        player.sendSystemMessage(Component.literal(
+            "§a[BotPvP] §fUnlimited health for §e" + botName + " §f: " + (newState ? "§aON" : "§cOFF")));
+        return true;
+    }
+
     public void tickBots(MinecraftServer server) {
         List<UUID> toRemove = new ArrayList<>();
         for (Map.Entry<UUID, PvPBot> entry : activeBots.entrySet()) {
