@@ -1,66 +1,43 @@
 package com.botpvp.bot;
 
 import com.botpvp.BotPvPMod;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
+import java.util.regex.Pattern;
 
-/**
- * PvPBot - Represents a single PvP practice bot.
- *
- * Modes:
- *   - Normal (moving): Bot walks toward and attacks the player.
- *   - Static (no movement): Bot stands in place and attacks if player is in range.
- *
- * Difficulty affects damage, speed, attack cooldown, and AI complexity.
- *
- * Bot names are validated against real Minecraft Java/Bedrock username rules.
- *
- * Supported Minecraft versions: 26.1.1, 26.1.2
- */
 public class PvPBot {
 
-    // ── Real Minecraft username validation ────────────────────────────────────
-    // Java Edition: 3-16 chars, letters/numbers/underscore only
-    // Bedrock Edition: 1-16 chars, same charset (prefixed with . on Java servers)
-    private static final java.util.regex.Pattern VALID_NAME_PATTERN =
-            java.util.regex.Pattern.compile("^[a-zA-Z0-9_]{3,16}$");
+    private static final Pattern VALID_NAME = Pattern.compile("^[a-zA-Z0-9_]{3,16}$");
 
-    /**
-     * Validate that a name follows Minecraft Java/Bedrock username rules.
-     * Returns null if valid, or an error message if invalid.
-     */
     public static String validateName(String name) {
-        if (name == null || name.isEmpty()) return null; // auto-generate is fine
-        if (name.length() < 3)  return "Bot name must be at least 3 characters (Minecraft username rule).";
-        if (name.length() > 16) return "Bot name must be 16 characters or fewer (Minecraft username rule).";
-        if (!VALID_NAME_PATTERN.matcher(name).matches())
-            return "Bot name can only contain letters, numbers, and underscores (Minecraft username rule).";
-        return null; // valid
+        if (name == null || name.isEmpty()) return null;
+        if (name.length() < 3)  return "Bot name must be at least 3 characters.";
+        if (name.length() > 16) return "Bot name must be 16 characters or fewer.";
+        if (!VALID_NAME.matcher(name).matches())
+            return "Bot name can only contain letters, numbers, and underscores.";
+        return null;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private final ServerPlayerEntity owner;
-    private final ServerWorld world;
+    private final ServerPlayer owner;
+    private final ServerLevel world;
     private final String difficulty;
     private final String name;
     private final UUID uuid;
-    private final boolean staticMode; // true = no movement, stand in place
+    private final boolean staticMode;
 
     private BotEntity botEntity;
     private boolean alive = false;
     private int tickCounter = 0;
 
-    // Difficulty stats
     private float attackDamage;
     private float movementSpeed;
     private int attackCooldown;
@@ -68,8 +45,7 @@ public class PvPBot {
     private boolean usesCombos;
     private boolean blockHits;
 
-    public PvPBot(ServerPlayerEntity owner, ServerWorld world,
-                  String difficulty, String name, boolean staticMode) {
+    public PvPBot(ServerPlayer owner, ServerLevel world, String difficulty, String name, boolean staticMode) {
         this.owner      = owner;
         this.world      = world;
         this.difficulty = difficulty.toLowerCase();
@@ -81,80 +57,41 @@ public class PvPBot {
 
     private void applyDifficultySettings() {
         switch (difficulty) {
-            case "easy" -> {
-                attackDamage   = 3.0f;
-                movementSpeed  = 0.15f;
-                attackCooldown = 20;
-                reactionDelay  = 40;
-                usesCombos     = false;
-                blockHits      = false;
-            }
-            case "medium" -> {
-                attackDamage   = 5.0f;
-                movementSpeed  = 0.22f;
-                attackCooldown = 12;
-                reactionDelay  = 20;
-                usesCombos     = true;
-                blockHits      = false;
-            }
-            case "hard" -> {
-                attackDamage   = 7.0f;
-                movementSpeed  = 0.28f;
-                attackCooldown = 6;
-                reactionDelay  = 10;
-                usesCombos     = true;
-                blockHits      = true;
-            }
-            case "nightmare" -> {
-                attackDamage   = 10.0f;
-                movementSpeed  = 0.35f;
-                attackCooldown = 3;
-                reactionDelay  = 2;
-                usesCombos     = true;
-                blockHits      = true;
-            }
-            default -> {
-                attackDamage   = 5.0f;
-                movementSpeed  = 0.22f;
-                attackCooldown = 12;
-                reactionDelay  = 20;
-                usesCombos     = true;
-                blockHits      = false;
-            }
+            case "easy"      -> { attackDamage=3f; movementSpeed=0.15f; attackCooldown=20; reactionDelay=40; usesCombos=false; blockHits=false; }
+            case "medium"    -> { attackDamage=5f; movementSpeed=0.22f; attackCooldown=12; reactionDelay=20; usesCombos=true;  blockHits=false; }
+            case "hard"      -> { attackDamage=7f; movementSpeed=0.28f; attackCooldown=6;  reactionDelay=10; usesCombos=true;  blockHits=true;  }
+            case "nightmare" -> { attackDamage=10f;movementSpeed=0.35f; attackCooldown=3;  reactionDelay=2;  usesCombos=true;  blockHits=true;  }
+            default          -> { attackDamage=5f; movementSpeed=0.22f; attackCooldown=12; reactionDelay=20; usesCombos=true;  blockHits=false; }
         }
     }
 
-    /** Spawn the bot into the world near the owner. */
     public boolean spawn() {
         try {
-            Vec3d ownerPos = owner.getPos();
+            Vec3 ownerPos = owner.position();
             double spawnX = ownerPos.x + (Math.random() * 4 - 2);
             double spawnY = ownerPos.y;
             double spawnZ = ownerPos.z + (Math.random() * 4 - 2);
 
             botEntity = new BotEntity(world, this);
-            botEntity.refreshPositionAndAngles(spawnX, spawnY, spawnZ, 0, 0);
+            botEntity.moveTo(spawnX, spawnY, spawnZ, 0, 0);
 
-            // Name tag: show mode in brackets
             String modeTag = staticMode ? "§7[Static]" : "§c[Bot]";
-            botEntity.setCustomName(Text.literal(modeTag + " §f" + name));
+            botEntity.setCustomName(Component.literal(modeTag + " §f" + name));
             botEntity.setCustomNameVisible(true);
 
-            if (botEntity.getAttributeInstance(EntityAttributes.MAX_HEALTH) != null)
-                botEntity.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(20.0);
-            if (botEntity.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED) != null)
-                botEntity.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED)
-                        .setBaseValue(staticMode ? 0.0 : movementSpeed);
-            if (botEntity.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE) != null)
-                botEntity.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE).setBaseValue(attackDamage);
+            if (botEntity.getAttribute(Attributes.MAX_HEALTH) != null)
+                botEntity.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20.0);
+            if (botEntity.getAttribute(Attributes.MOVEMENT_SPEED) != null)
+                botEntity.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(staticMode ? 0.0 : movementSpeed);
+            if (botEntity.getAttribute(Attributes.ATTACK_DAMAGE) != null)
+                botEntity.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(attackDamage);
 
             botEntity.setHealth(20.0f);
             equipBot();
-            world.spawnEntity(botEntity);
+            world.addFreshEntity(botEntity);
             alive = true;
 
-            BotPvPMod.LOGGER.info("[BotPvP] Bot '{}' spawned at ({}, {}, {}) mode={}",
-                    name, spawnX, spawnY, spawnZ, staticMode ? "static" : "moving");
+            BotPvPMod.LOGGER.info("[BotPvP] Bot '{}' spawned at ({}, {}, {})", name, spawnX, spawnY, spawnZ);
             return true;
         } catch (Exception e) {
             BotPvPMod.LOGGER.error("[BotPvP] Failed to spawn bot '{}'", name, e);
@@ -165,43 +102,42 @@ public class PvPBot {
     private void equipBot() {
         switch (difficulty) {
             case "easy" -> {
-                botEntity.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.WOODEN_SWORD));
-                botEntity.equipStack(EquipmentSlot.HEAD,     new ItemStack(Items.LEATHER_HELMET));
-                botEntity.equipStack(EquipmentSlot.CHEST,    new ItemStack(Items.LEATHER_CHESTPLATE));
-                botEntity.equipStack(EquipmentSlot.LEGS,     new ItemStack(Items.LEATHER_LEGGINGS));
-                botEntity.equipStack(EquipmentSlot.FEET,     new ItemStack(Items.LEATHER_BOOTS));
+                botEntity.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.WOODEN_SWORD));
+                botEntity.setItemSlot(EquipmentSlot.HEAD,     new ItemStack(Items.LEATHER_HELMET));
+                botEntity.setItemSlot(EquipmentSlot.CHEST,    new ItemStack(Items.LEATHER_CHESTPLATE));
+                botEntity.setItemSlot(EquipmentSlot.LEGS,     new ItemStack(Items.LEATHER_LEGGINGS));
+                botEntity.setItemSlot(EquipmentSlot.FEET,     new ItemStack(Items.LEATHER_BOOTS));
             }
             case "medium" -> {
-                botEntity.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
-                botEntity.equipStack(EquipmentSlot.HEAD,     new ItemStack(Items.IRON_HELMET));
-                botEntity.equipStack(EquipmentSlot.CHEST,    new ItemStack(Items.IRON_CHESTPLATE));
-                botEntity.equipStack(EquipmentSlot.LEGS,     new ItemStack(Items.IRON_LEGGINGS));
-                botEntity.equipStack(EquipmentSlot.FEET,     new ItemStack(Items.IRON_BOOTS));
+                botEntity.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+                botEntity.setItemSlot(EquipmentSlot.HEAD,     new ItemStack(Items.IRON_HELMET));
+                botEntity.setItemSlot(EquipmentSlot.CHEST,    new ItemStack(Items.IRON_CHESTPLATE));
+                botEntity.setItemSlot(EquipmentSlot.LEGS,     new ItemStack(Items.IRON_LEGGINGS));
+                botEntity.setItemSlot(EquipmentSlot.FEET,     new ItemStack(Items.IRON_BOOTS));
             }
             case "hard" -> {
-                botEntity.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND_SWORD));
-                botEntity.equipStack(EquipmentSlot.HEAD,     new ItemStack(Items.DIAMOND_HELMET));
-                botEntity.equipStack(EquipmentSlot.CHEST,    new ItemStack(Items.DIAMOND_CHESTPLATE));
-                botEntity.equipStack(EquipmentSlot.LEGS,     new ItemStack(Items.DIAMOND_LEGGINGS));
-                botEntity.equipStack(EquipmentSlot.FEET,     new ItemStack(Items.DIAMOND_BOOTS));
+                botEntity.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND_SWORD));
+                botEntity.setItemSlot(EquipmentSlot.HEAD,     new ItemStack(Items.DIAMOND_HELMET));
+                botEntity.setItemSlot(EquipmentSlot.CHEST,    new ItemStack(Items.DIAMOND_CHESTPLATE));
+                botEntity.setItemSlot(EquipmentSlot.LEGS,     new ItemStack(Items.DIAMOND_LEGGINGS));
+                botEntity.setItemSlot(EquipmentSlot.FEET,     new ItemStack(Items.DIAMOND_BOOTS));
             }
             case "nightmare" -> {
-                botEntity.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_SWORD));
-                botEntity.equipStack(EquipmentSlot.HEAD,     new ItemStack(Items.NETHERITE_HELMET));
-                botEntity.equipStack(EquipmentSlot.CHEST,    new ItemStack(Items.NETHERITE_CHESTPLATE));
-                botEntity.equipStack(EquipmentSlot.LEGS,     new ItemStack(Items.NETHERITE_LEGGINGS));
-                botEntity.equipStack(EquipmentSlot.FEET,     new ItemStack(Items.NETHERITE_BOOTS));
+                botEntity.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_SWORD));
+                botEntity.setItemSlot(EquipmentSlot.HEAD,     new ItemStack(Items.NETHERITE_HELMET));
+                botEntity.setItemSlot(EquipmentSlot.CHEST,    new ItemStack(Items.NETHERITE_CHESTPLATE));
+                botEntity.setItemSlot(EquipmentSlot.LEGS,     new ItemStack(Items.NETHERITE_LEGGINGS));
+                botEntity.setItemSlot(EquipmentSlot.FEET,     new ItemStack(Items.NETHERITE_BOOTS));
             }
         }
     }
 
-    /** Called every server tick to update bot AI. */
     public void tick() {
-        if (!alive || botEntity == null || botEntity.isDead()) {
+        if (!alive || botEntity == null || botEntity.isDeadOrDying()) {
             if (alive) {
                 alive = false;
                 if (owner.isAlive()) {
-                    owner.sendMessage(Text.literal(
+                    owner.sendSystemMessage(Component.literal(
                         "§e[BotPvP] §fBot §c" + name + " §fhas died! Use §e/botpvp spawn §fto call another."));
                 }
             }
@@ -212,24 +148,21 @@ public class PvPBot {
         if (tickCounter < reactionDelay) return;
 
         LivingEntity target = owner;
-        double distanceSq = botEntity.squaredDistanceTo(target);
+        double distanceSq = botEntity.distanceToSqr(target);
 
-        // ── Static mode: just stand and attack if close ─────────────────────
         if (staticMode) {
             faceTarget(target);
             if (distanceSq <= 9 && tickCounter % attackCooldown == 0) {
                 performAttack(target);
-                if (blockHits) botEntity.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+                if (blockHits) botEntity.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
             }
             return;
         }
 
-        // ── Moving mode ──────────────────────────────────────────────────────
         if (distanceSq > 400) {
-            // Teleport closer if too far (>20 blocks)
             if (tickCounter % 40 == 0) {
-                Vec3d pos = target.getPos();
-                botEntity.teleport(pos.x + 3, pos.y, pos.z + 3);
+                Vec3 pos = target.position();
+                botEntity.teleportTo(pos.x + 3, pos.y, pos.z + 3);
             }
             return;
         }
@@ -241,7 +174,7 @@ public class PvPBot {
         } else {
             if (tickCounter % attackCooldown == 0) performAttack(target);
             if (blockHits && tickCounter % (attackCooldown / 2) == 0)
-                botEntity.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+                botEntity.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
 
         if (usesCombos && tickCounter % (attackCooldown * 3) == 0 && distanceSq < 9)
@@ -249,22 +182,22 @@ public class PvPBot {
     }
 
     private void faceTarget(LivingEntity target) {
-        Vec3d diff = target.getPos().subtract(botEntity.getPos()).normalize();
+        Vec3 diff = target.position().subtract(botEntity.position()).normalize();
         float yaw   = (float) Math.toDegrees(Math.atan2(-diff.x, diff.z));
         float pitch = (float) Math.toDegrees(-Math.asin(diff.y));
-        botEntity.setYaw(yaw);
-        botEntity.setHeadYaw(yaw);
-        botEntity.setPitch(pitch);
+        botEntity.setYRot(yaw);
+        botEntity.setYHeadRot(yaw);
+        botEntity.setXRot(pitch);
     }
 
     private void moveTowardTarget(LivingEntity target) {
-        Vec3d dir = target.getPos().subtract(botEntity.getPos()).normalize();
-        botEntity.setVelocity(dir.x * movementSpeed * 10, botEntity.getVelocity().y, dir.z * movementSpeed * 10);
+        Vec3 dir = target.position().subtract(botEntity.position()).normalize();
+        botEntity.setDeltaMovement(dir.x * movementSpeed * 10, botEntity.getDeltaMovement().y, dir.z * movementSpeed * 10);
     }
 
     private void performAttack(LivingEntity target) {
-        botEntity.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-        target.damage(world.getDamageSources().mobAttack(botEntity), attackDamage);
+        botEntity.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        target.hurt(world.damageSources().mobAttack(botEntity), attackDamage);
     }
 
     private void performComboAttack(LivingEntity target) {
@@ -272,26 +205,24 @@ public class PvPBot {
         if (target.isAlive()) performAttack(target);
     }
 
-    /** Heal the bot to full HP (or respawn if dead). */
     public void respawn() {
-        if (botEntity != null && !botEntity.isDead()) {
+        if (botEntity != null && !botEntity.isDeadOrDying()) {
             botEntity.setHealth(20.0f);
-            owner.sendMessage(Text.literal("§a[BotPvP] §fBot §e" + name + " §fhas been healed to full HP!"));
+            owner.sendSystemMessage(Component.literal("§a[BotPvP] §fBot §e" + name + " §fhas been healed!"));
         } else {
             spawn();
         }
     }
 
-    /** Remove the bot from the world. */
     public void remove() {
         if (botEntity != null) botEntity.discard();
         alive = false;
     }
 
-    public UUID   getUuid()       { return uuid; }
-    public String getName()       { return name; }
-    public String getDifficulty() { return difficulty; }
-    public boolean isStatic()     { return staticMode; }
-    public boolean isAlive()      { return alive && botEntity != null && !botEntity.isDead(); }
-    public BotEntity getEntity()  { return botEntity; }
+    public UUID    getUuid()       { return uuid; }
+    public String  getName()       { return name; }
+    public String  getDifficulty() { return difficulty; }
+    public boolean isStatic()      { return staticMode; }
+    public boolean isAlive()       { return alive && botEntity != null && !botEntity.isDeadOrDying(); }
+    public BotEntity getEntity()   { return botEntity; }
 }
