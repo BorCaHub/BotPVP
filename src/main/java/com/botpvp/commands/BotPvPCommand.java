@@ -18,7 +18,6 @@ import net.minecraft.world.item.Item;
 public class BotPvPCommand {
 
     private static final String[] DIFFICULTIES = {"easy", "medium", "hard", "nightmare"};
-    private static final String[] POSITIONS = {"toplayer", "up", "custom"};
     private static final String[] SLOTS = {"mainhand", "offhand", "head", "chest", "legs", "feet"};
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -92,6 +91,11 @@ public class BotPvPCommand {
                                             FloatArgumentType.getFloat(ctx, "yaw"),
                                             FloatArgumentType.getFloat(ctx, "pitch"))))))))
 
+                .then(Commands.literal("unlimitedhealth")
+                    .then(Commands.argument("name", StringArgumentType.word())
+                        .executes(ctx -> executeUnlimitedHealth(ctx.getSource(),
+                                StringArgumentType.getString(ctx, "name")))))
+
                 .then(Commands.literal("info")
                     .executes(ctx -> executeInfo(ctx.getSource())))
         );
@@ -110,6 +114,7 @@ public class BotPvPCommand {
             "§e/botpvp heal §7[name]\n" +
             "§e/botpvp additems §7<bot> <slot> <item>\n" +
             "§e/botpvp setitems §7<bot> <toplayer|up|custom yaw pitch>\n" +
+            "§e/botpvp unlimitedhealth §7<bot>\n" +
             "§e/botpvp info\n" +
             "§7Difficulties: §aeasy §7| §bmedium §7| §chard §7| §4nightmare\n" +
             "§7Slots: mainhand, offhand, head, chest, legs, feet"
@@ -193,6 +198,11 @@ public class BotPvPCommand {
         boolean ok = BotManager.getInstance().setBotItemPose(source.getPlayer(), botName, pose, yaw, pitch);
         if (ok) source.sendSystemMessage(Component.literal("§a[BotPvP] §fBot §e" + botName + " §fpose updated."));
         return ok ? 1 : 0;
+    }
+
+    private static int executeUnlimitedHealth(CommandSourceStack source, String botName) {
+        if (!source.isPlayer()) { source.sendFailure(Component.literal("§c[BotPvP] Player only!")); return 0; }
+        return BotManager.getInstance().toggleUnlimitedHealth(source.getPlayer(), botName) ? 1 : 0;
     }
 
     private static int executeInfo(CommandSourceStack source) {
