@@ -52,6 +52,8 @@ public class PvPBot {
     private float customYaw = 0f;
     private float customPitch = 0f;
 
+    private boolean unlimitedHealth = false;
+
     public PvPBot(ServerPlayer owner, ServerLevel world, String difficulty, String name, boolean staticMode) {
         this.owner      = owner;
         this.world      = world;
@@ -163,6 +165,13 @@ public class PvPBot {
         }
     }
 
+    public void setUnlimitedHealth(boolean value) {
+        unlimitedHealth = value;
+        if (botEntity != null) botEntity.setHealth(20.0f);
+    }
+
+    public boolean isUnlimitedHealth() { return unlimitedHealth; }
+
     public void tick() {
         if (!alive || botEntity == null || botEntity.isDeadOrDying()) {
             if (alive) {
@@ -173,6 +182,10 @@ public class PvPBot {
                 }
             }
             return;
+        }
+
+        if (unlimitedHealth && botEntity.getHealth() < 20.0f) {
+            botEntity.setHealth(20.0f);
         }
 
         if (staticMode) {
