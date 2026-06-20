@@ -3,16 +3,23 @@ package com.botpvp.commands;
 import com.botpvp.BotManager;
 import com.botpvp.bot.PvPBot;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Item;
 
 public class BotPvPCommand {
 
     private static final String[] DIFFICULTIES = {"easy", "medium", "hard", "nightmare"};
+    private static final String[] POSITIONS = {"toplayer", "up", "custom"};
+    private static final String[] SLOTS = {"mainhand", "offhand", "head", "chest", "legs", "feet"};
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
@@ -59,6 +66,32 @@ public class BotPvPCommand {
                         .executes(ctx -> executeHeal(ctx.getSource(),
                                 StringArgumentType.getString(ctx, "name")))))
 
+                .then(Commands.literal("additems")
+                    .then(Commands.argument("name", StringArgumentType.word())
+                        .then(Commands.argument("slot", StringArgumentType.word())
+                            .suggests((ctx, b) -> { for (String s : SLOTS) b.suggest(s); return b.buildFuture(); })
+                            .then(Commands.argument("item", StringArgumentType.word())
+                                .executes(ctx -> executeAddItem(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "name"),
+                                        StringArgumentType.getString(ctx, "slot"),
+                                        StringArgumentType.getString(ctx, "item")))))))
+
+                .then(Commands.literal("setitems")
+                    .then(Commands.argument("name", StringArgumentType.word())
+                        .then(Commands.literal("toplayer")
+                            .executes(ctx -> executeSetItems(ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "name"), PvPBot.ItemPose.TO_PLAYER, 0, 0)))
+                        .then(Commands.literal("up")
+                            .executes(ctx -> executeSetItems(ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "name"), PvPBot.ItemPose.UP, 0, 0)))
+                        .then(Commands.literal("custom")
+                            .then(Commands.argument("yaw", FloatArgumentType.floatArg(-180, 180))
+                                .then(Commands.argument("pitch", FloatArgumentType.floatArg(-90, 90))
+                                    .executes(ctx -> executeSetItems(ctx.getSource(),
+                                            StringArgumentType.getString(ctx, "name"), PvPBot.ItemPose.CUSTOM,
+                                            FloatArgumentType.getFloat(ctx, "yaw"),
+                                            FloatArgumentType.getFloat(ctx, "pitch"))))))))
+
                 .then(Commands.literal("info")
                     .executes(ctx -> executeInfo(ctx.getSource())))
         );
@@ -66,14 +99,20 @@ public class BotPvPCommand {
 
     private static int executeHelp(CommandSourceStack source) {
         source.sendSystemMessage(Component.literal(
-            "§6§l╔════════════════════════════════════╗\n" +
-            "§6§l║      §eBotPvP Mod  §7v1.0.0           §6§l║\n" +
-            "§6§l╚════════════════════════════════════╝\n" +
+            "§6§l╔══════════════════════════════╗\n" +
+            "§6§l║   §eBotPvP Mod  §7v1.0.0        §6§l║\n" +
+            "§6§l╚══════════════════════════════╝\n" +
             "§e/botpvp spawn §7[difficulty] [name]\n" +
             "§e/botpvp spawn static §7[difficulty] [name]\n" +
-            "§e/botpvp kill §7<name>  §e/botpvp killall\n" +
-            "§e/botpvp list  §e/botpvp heal §7[name]  §e/botpvp info\n" +
-            "§7Difficulties: §aeasy §7| §bmedium §7| §chard §7| §4nightmare"
+            "§e/botpvp kill §7<name>\n" +
+            "§e/botpvp killall\n" +
+            "§e/botpvp list\n" +
+            "§e/botpvp heal §7[name]\n" +
+            "§e/botpvp additems §7<bot> <slot> <item>\n" +
+            "§e/botpvp setitems §7<bot> <toplayer|up|custom yaw pitch>\n" +
+            "§e/botpvp info\n" +
+            "§7Difficulties: §aeasy §7| §bmedium §7| §chard §7| §4nightmare\n" +
+            "§7Slots: mainhand, offhand, head, chest, legs, feet"
         ));
         return 1;
     }
@@ -126,6 +165,34 @@ public class BotPvPCommand {
         if (!source.isPlayer()) { source.sendFailure(Component.literal("§c[BotPvP] Player only!")); return 0; }
         BotManager.getInstance().healAllBots(source.getPlayer());
         return 1;
+    }
+
+    private static int executeAddItem(CommandSourceStack source, String botName, String slotName, String itemName) {
+        if (!source.isPlayer()) { source.sendFailure(Component.literal("§c[BotPvP] Player only!")); return 0; }
+        EquipmentSlot slot;
+        try {
+            slot = EquipmentSlot.valueOf(slotName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            source.sendFailure(Component.literal("§c[BotPvP] Invalid slot! Use: mainhand, offhand, head, chest, legs, feet"));
+            return 0;
+        }
+        ResourceLocation id = ResourceLocation.tryParse(itemName.contains(":") ? itemName : "minecraft:" + itemName);
+        Item item = id != null ? BuiltInRegistries.ITEM.getOptional(id).orElse(null) : null;
+        if (item == null) {
+            source.sendFailure(Component.literal("§c[BotPvP] Unknown item: §e" + itemName));
+            return 0;
+        }
+        boolean ok = BotManager.getInstance().addItemToBot(source.getPlayer(), botName, slot, item);
+        if (ok) source.sendSystemMessage(Component.literal(
+                "§a[BotPvP] §fGave §e" + itemName + " §fto §e" + botName + " §7(" + slotName + ")"));
+        return ok ? 1 : 0;
+    }
+
+    private static int executeSetItems(CommandSourceStack source, String botName, PvPBot.ItemPose pose, float yaw, float pitch) {
+        if (!source.isPlayer()) { source.sendFailure(Component.literal("§c[BotPvP] Player only!")); return 0; }
+        boolean ok = BotManager.getInstance().setBotItemPose(source.getPlayer(), botName, pose, yaw, pitch);
+        if (ok) source.sendSystemMessage(Component.literal("§a[BotPvP] §fBot §e" + botName + " §fpose updated."));
+        return ok ? 1 : 0;
     }
 
     private static int executeInfo(CommandSourceStack source) {
